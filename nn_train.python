@@ -9,10 +9,7 @@ def get_data():
 	x = data[:, 2:]
 	y = np.zeros((len(data), 1))
 	y[(data_str[:, 1] == 'M') == True] = 1
-	vec_y = np.zeros((len(y), 2))
-	vec_y[(y[:, 0] == 0), 0] = 1
-	vec_y[(y[:, 0] == 1), 1] = 1
-	return data, x, y, vec_y
+	return x, y
 
 @jit
 def sigmoid(x):
@@ -23,65 +20,48 @@ def sigmoid_gradient(x):
 	return sigmoid(x) * (1 - sigmoid(x))
 
 def main():
-	data, x, y, vec_y = get_data()
-	theta_1 = np.random.randn(30, 31)
-	theta_2 = np.random.randn(30, 31)
-	theta_3 = np.random.randn(30, 31)
-	theta_4 = np.random.randn(30, 31)
-	theta_5 = np.random.randn(1, 31)
+	x, y = get_data()
 	m = x.shape[0]
-	iterations = 10000
-	alpha = 0.001
-	lmbd = 0.01
-	a1 = np.hstack((np.ones((m, 1)), x))
-	for i in range(0, iterations):
+	topology = [30, 30, 20, 10, 1]
+	theta = [np.random.randn(topology[1], topology[0] + 1)]
+	for i in range (1, len(topology) - 1):
+		theta.extend([np.random.randn(topology[i + 1], topology[i] + 1)])
+	layers = len(topology) - 1
+	epochs = 100000
+	alpha = 0.00001
+	lmbd = 0.00001
+	for i in range(0, epochs + 1):
 		## Feedforward
-		z2 = np.dot(a1, theta_1.T)
-		a2 = np.hstack((np.ones((len(z2), 1)), sigmoid(z2)))
-		z3 = np.dot(a2, theta_2.T)
-		a3 = np.hstack((np.ones((len(z3), 1)), sigmoid(z3)))
-		z4 = np.dot(a3, theta_3.T)
-		a4 = np.hstack((np.ones((len(z4), 1)), sigmoid(z4)))
-		z5 = np.dot(a4, theta_4.T)
-		a5 = np.hstack((np.ones((len(z5), 1)), sigmoid(z5)))
-		z6 = np.dot(a5, theta_5.T)
-		a6 = sigmoid(z6)
-		print(a6)
+		a = [np.hstack((np.ones((m, 1)), x))]
+		z = [np.dot(a[0], theta[0].T)]
+		for j in range(0, layers - 1):
+			a.extend([np.hstack((np.ones((len(z[j]), 1)), sigmoid(z[j])))])
+			z.extend([np.dot(a[j + 1], theta[j + 1].T)])
+		a.extend([sigmoid(z[layers - 1])])
 		## Backpropagation
-		d6 = a6 - y
-		d5 = np.dot(d6, theta_5[:, 1:]) * sigmoid_gradient(z5)
-		d4 = np.dot(d5, theta_4[:, 1:]) * sigmoid_gradient(z4)
-		d3 = np.dot(d4, theta_3[:, 1:]) * sigmoid_gradient(z3)
-		d2 = np.dot(d3, theta_2[:, 1:]) * sigmoid_gradient(z2)
+		d = [a[layers] - y]
+		for j in range(0, layers - 1):
+			d.extend([np.dot(d[j], theta[-(j + 1)][:, 1:]) * \
+				sigmoid_gradient(z[-(j + 2)])])
 		## Gradient Update
-		theta_grad_1 = np.dot(d2.T, a1) / m
-		theta_grad_1[:, 1:] += (lmbd * theta_1[:, 1:]) / m
-		theta_grad_2 = np.dot(d3.T, a2) / m
-		theta_grad_2[:, 1:] += (lmbd * theta_2[:, 1:]) / m
-		theta_grad_3 = np.dot(d4.T, a3) / m
-		theta_grad_3[:, 1:] += (lmbd * theta_3[:, 1:]) / m
-		theta_grad_4 = np.dot(d5.T, a4) / m
-		theta_grad_4[:, 1:] += (lmbd * theta_4[:, 1:]) / m
-		theta_grad_5 = np.dot(d6.T, a5) / m
-		theta_grad_5[:, 1:] += (lmbd * theta_5[:, 1:]) / m
-		theta_1 -= alpha * (theta_grad_1)
-		theta_2 -= alpha * (theta_grad_2)
-		theta_3 -= alpha * (theta_grad_3)
-		theta_4 -= alpha * (theta_grad_4)
-		theta_5 -= alpha * (theta_grad_5)
-	true = 0
-	false = 0
-	for i in range(0, len(a6)):
-		if (a6[i] >= 0.5 and y[i]) or \
-			(a6[i] < 0.5 and y[i] == 0):
-			true += 1
-		if (a6[i] >= 0.5 and y[i] == 0) or \
-			(a6[i] < 0.5 and y[i]):
-			print(i, a6[i], y[i])
-			false += 1
-	print(true, false)
+		for j in range(0, layers):
+			theta_grad = np.dot(d[-(j + 1)].T, a[j]) / m
+			theta_grad[:, 1:] += (lmbd * theta[j][:, 1:]) / m
+			theta[j] -= alpha * theta_grad
+		## Print Status
+		true = 0
+		false = 0
+		for j in range(0, len(a[layers])):
+			if (a[layers][j] >= 0.5 and y[j]) or (a[layers][j] < 0.5 and y[j] == 0):
+				true += 1.
+			if (a[layers][j] >= 0.5 and y[j] == 0) or (a[layers][j] < 0.5 and y[j]):
+				false += 1.
+		print("epoch {:d}/{:d} - loss: {:f} - cost: {:f}".format(i, \
+			epochs, false / (true + false), \
+			((np.dot(y.T, np.log(a[layers])) - \
+			np.dot(1 - y.T, np.log(1 - a[layers]))) / m)[0][0]))
 
 if __name__ == "__main__":
 	warnings.simplefilter("ignore")
-	#np.random.seed(2)
+	np.random.seed(1)
 	main()
