@@ -1,4 +1,5 @@
 import numpy as np
+import matplotlib.pyplot as plt
 import warnings
 from numba import jit
 from numpy import arange
@@ -7,9 +8,17 @@ def get_data():
 	data = np.genfromtxt("./data.csv", delimiter = ',')
 	data_str = np.genfromtxt("./data.csv", delimiter = ',', dtype = np.str)
 	x = data[:, 2:]
-	y = np.zeros((len(data), 1))
-	y[(data_str[:, 1] == 'M') == True] = 1
-	return x, y
+	tmp_y = np.zeros((len(data), 1))
+	tmp_y[(data_str[:, 1] == 'M') == True] = 1
+	y = np.zeros((len(tmp_y), int(max(tmp_y)[0]) + 1))
+	for i in range(0, max(tmp_y) + 1):
+		y[(tmp_y[:, 0] == i), i] = 1
+	id_val = np.random.permutation(x.shape[0])[int(x.shape[0] * 0.7):]
+	x_val = x[id_val, :]
+	y_val = y[id_val, :]
+	x = np.delete(x, id_val, axis = 0)
+	y = np.delete(y, id_val, axis = 0)
+	return x, y, x_val, y_val
 
 @jit
 def sigmoid(x):
@@ -19,18 +28,55 @@ def sigmoid(x):
 def sigmoid_gradient(x):
 	return sigmoid(x) * (1 - sigmoid(x))
 
+def print_status(a, y, m, x_val, y_val, m_val, theta, layers, epochs, i):
+	## Loss
+	true = 0
+	false = 0
+	for j in range(0, len(a[layers])):
+		if y[j, np.argmax(a[layers], axis = 1)[j]] == 1:
+			true += 1.
+		else:
+			false += 1.
+	loss = false / (true + false)
+	## Cost
+	cost = ((np.dot(y.T, np.log(a[layers])) - \
+		np.dot(1 - y.T, np.log(1 - a[layers]))) / m)[0][0]
+	## Val_loss
+	val_true = 0
+	val_false = 0
+	a = [np.hstack((np.ones((m_val, 1)), x_val))]
+	z = [np.dot(a[0], theta[0].T)]
+	for j in range(0, layers - 1):
+		a.extend([np.hstack((np.ones((len(z[j]), 1)), sigmoid(z[j])))])
+		z.extend([np.dot(a[j + 1], theta[j + 1].T)])
+	a.extend([sigmoid(z[layers - 1])])
+	for j in range(0, len(a[layers])):
+		if y_val[j, np.argmax(a[layers], axis = 1)[j]] == 1:
+			val_true += 1.
+		else:
+			val_false += 1.
+	val_loss = val_false / (val_true + val_false)
+	print("epoch {:d}/{:d} - loss: {:f} - val_loss: {:f} - cost {:f}".format( \
+		i, epochs, loss, val_loss, cost))
+	return loss, val_loss, cost
+
 def main():
-	x, y = get_data()
+	x, y, x_val, y_val = get_data()
 	m = x.shape[0]
-	topology = [30, 30, 20, 10, 1]
+	m_val = x_val.shape[0]
+	topology = [x.shape[1], 3000, 3000, 3000, y.shape[1]]
 	theta = [np.random.randn(topology[1], topology[0] + 1)]
 	for i in range (1, len(topology) - 1):
 		theta.extend([np.random.randn(topology[i + 1], topology[i] + 1)])
 	layers = len(topology) - 1
-	epochs = 100000
-	alpha = 0.00001
-	lmbd = 0.00001
-	for i in range(0, epochs + 1):
+	epochs = 10
+	alpha = 0.001
+	lmbd = 0.001
+	momentum = 0.001
+	hist_loss = []
+	hist_val_loss = []
+	hist_cost = []
+	for i in range(1, epochs + 1):
 		## Feedforward
 		a = [np.hstack((np.ones((m, 1)), x))]
 		z = [np.dot(a[0], theta[0].T)]
@@ -41,25 +87,36 @@ def main():
 		## Backpropagation
 		d = [a[layers] - y]
 		for j in range(0, layers - 1):
-			d.extend([np.dot(d[j], theta[-(j + 1)][:, 1:]) * \
-				sigmoid_gradient(z[-(j + 2)])])
+			try:
+				d.extend([np.dot(d[j], theta[-(j + 1)][:, 1:] - \
+					momentum * theta_grad_prev[-(j + 1)][:, 1:]) * \
+					sigmoid_gradient(z[-(j + 2)])])
+			except:
+				d.extend([np.dot(d[j], theta[-(j + 1)][:, 1:]) * \
+					sigmoid_gradient(z[-(j + 2)])])
 		## Gradient Update
+		theta_grad = []
 		for j in range(0, layers):
-			theta_grad = np.dot(d[-(j + 1)].T, a[j]) / m
-			theta_grad[:, 1:] += (lmbd * theta[j][:, 1:]) / m
-			theta[j] -= alpha * theta_grad
+			theta_grad.extend([np.dot(d[-(j + 1)].T, a[j]) / m])
+			theta_grad[j][:, 1:] += (lmbd * theta[j][:, 1:]) / m
+			try:
+				theta[j] -= momentum * theta_grad_prev[j] + \
+					alpha * theta_grad[j]
+			except:
+				theta[j] -= alpha * theta_grad[j]
+		theta_grad_prev = theta_grad
 		## Print Status
-		true = 0
-		false = 0
-		for j in range(0, len(a[layers])):
-			if (a[layers][j] >= 0.5 and y[j]) or (a[layers][j] < 0.5 and y[j] == 0):
-				true += 1.
-			if (a[layers][j] >= 0.5 and y[j] == 0) or (a[layers][j] < 0.5 and y[j]):
-				false += 1.
-		print("epoch {:d}/{:d} - loss: {:f} - cost: {:f}".format(i, \
-			epochs, false / (true + false), \
-			((np.dot(y.T, np.log(a[layers])) - \
-			np.dot(1 - y.T, np.log(1 - a[layers]))) / m)[0][0]))
+		loss, val_loss, cost = print_status(a, y, m, x_val, y_val, m_val, \
+			theta, layers, epochs, i)
+		hist_loss.extend([loss])
+		hist_val_loss.extend([val_loss])
+		hist_cost.extend([cost])
+	plt_x = np.linspace(1, epochs, epochs)
+	plt.plot(plt_x, hist_loss)
+	plt.plot(plt_x, hist_val_loss)
+	plt.plot(plt_x, hist_cost)
+	plt.legend(["Loss", "Val_loss", "Cost"])
+	plt.show()
 
 if __name__ == "__main__":
 	warnings.simplefilter("ignore")
