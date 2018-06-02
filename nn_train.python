@@ -5,8 +5,12 @@ from numba import jit
 from numpy import arange
 
 def get_data():
-	data = np.genfromtxt("./data.csv", delimiter = ',')
-	data_str = np.genfromtxt("./data.csv", delimiter = ',', dtype = np.str)
+	try:
+		data = np.genfromtxt("./data.csv", delimiter = ',')
+		data_str = np.genfromtxt("./data.csv", delimiter = ',', dtype = np.str)
+	except:
+		print("Error")
+		exit()
 	x = data[:, 2:]
 	tmp_y = np.zeros((len(data), 1))
 	tmp_y[(data_str[:, 1] == 'M') == True] = 1
@@ -20,15 +24,15 @@ def get_data():
 	y = np.delete(y, id_val, axis = 0)
 	m = x.shape[0]
 	m_val = x_val.shape[0]
-	topology = [x.shape[1], 500, 500, 500, y.shape[1]]
+	topology = [x.shape[1], 300, 300, y.shape[1]]
 	theta = [np.random.randn(topology[1], topology[0] + 1)]
 	for i in range (1, len(topology) - 1):
 		theta.extend([np.random.randn(topology[i + 1], topology[i] + 1)])
 	layers = len(topology) - 1
-	epochs = 1000
-	alpha = 0.0001
+	epochs = 1300
+	alpha = 0.001
 	lmbd = 100
-	momentum = 0.0001
+	momentum = 0.0003
 	hist_loss = []; hist_val_loss = []; hist_cost = []
 	return x, y, m, x_val, y_val, m_val, topology, layers, theta, epochs, \
 		alpha, lmbd, momentum, hist_loss, hist_val_loss, hist_cost
@@ -125,6 +129,7 @@ def main():
 		hist_val_loss.extend([val_loss])
 		hist_cost.extend([cost])
 	plot_data(epochs, hist_loss, hist_val_loss, hist_cost)
+	np.savez("weights.npz", theta = theta, topology = topology)
 
 if __name__ == "__main__":
 	warnings.simplefilter("ignore")
