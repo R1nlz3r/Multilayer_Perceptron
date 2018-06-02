@@ -1,5 +1,5 @@
 weights.npz
-predict.csv
+prediction.csv
 *.DS_Store
 .AppleDouble
 .LSOverride
